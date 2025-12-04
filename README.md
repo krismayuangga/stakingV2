@@ -1,11 +1,12 @@
-# 🏭 OZONE Staking V2 - Dual Reward Staking Platform
+# 🏭 OZONE Staking V2 - Integrated Presale & Staking Platform
 
 ![Solidity](https://img.shields.io/badge/Solidity-0.8.20-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Network](https://img.shields.io/badge/Network-BSC-yellow)
 ![Pattern](https://img.shields.io/badge/Pattern-UUPS%20Upgradeable-orange)
+![Tax](https://img.shields.io/badge/Tax-1%25%20USDT%20%2B%201%25%20OZONE-red)
 
-**Production-ready dual reward staking ecosystem with auto-tier system and real-time price oracle integration.**
+**Production-ready integrated presale & staking platform with automatic tax collection and USDT-only rewards.**
 
 ---
 
@@ -27,14 +28,15 @@
 
 ## 🎯 Overview
 
-OZONE Staking V2 adalah platform staking dual-reward dengan sistem tier otomatis yang memungkinkan:
+OZONE Staking V2 adalah **platform terintegrasi presale + staking dalam 1 contract** yang memungkinkan:
 
-- **Holder Lama**: Stake OZONE tokens langsung ke pool pilihan
-- **Buyer Baru**: Beli OZONE dengan USDT dan langsung auto-stake (1 transaksi)
-- **Dual Rewards**: Pilih reward dalam USDT atau OZONE
-- **Auto-Tier**: Pool ditentukan otomatis berdasarkan nilai USDT investasi
-- **Anti-Dump**: OZONE dari presale tidak pernah masuk wallet user
-- **300% Max Reward**: Principal auto-burn setelah mencapai 300% reward
+- **Buy & Stake**: Beli OZONE dengan USDT dan langsung auto-stake (1 transaksi!)
+- **Manual Stake**: Stake OZONE yang sudah dimiliki ke pool pilihan
+- **USDT Rewards Only**: Semua rewards dibayar dalam USDT (stablecoin)
+- **Tax System**: 1% USDT platform fee + 1% OZONE transfer tax (auto-collected)
+- **5 Pool Tiers**: LimoX A/B/C (6-8% APY), SaproX A/B (9-10% APY)
+- **Anti-Dump**: OZONE dari presale langsung stake, tidak masuk wallet
+- **Auto-Burn**: Principal OZONE burn setelah durasi habis
 - **Upgradeable**: UUPS proxy pattern untuk future improvements
 
 ---
@@ -43,32 +45,55 @@ OZONE Staking V2 adalah platform staking dual-reward dengan sistem tier otomatis
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                  OZONE V2 ECOSYSTEM                     │
+│              OZONE STAKING V2 ECOSYSTEM                 │
+│         (1 Contract - Integrated Solution)              │
 ├────────────────────────────────────────────────────────┤
 │                                                         │
 │  📦 OzoneStakingV2.sol (UUPS Upgradeable)             │
-│  ├─ For: Existing OZONE holders                        │
-│  ├─ Input: OZONE tokens                                │
-│  ├─ Function: stake(poolId, amount)                    │
-│  ├─ Claim: Every 15 days (time-based)                  │
-│  ├─ Rewards: USDT or OZONE (user choice)               │
-│  └─ Exit: Auto-burn at 300% max reward                 │
 │                                                         │
-│  📦 OzonePresaleV2.sol (UUPS Upgradeable)              │
-│  ├─ For: New buyers via presale                        │
+│  🛒 PRESALE FEATURE                                     │
+│  ├─ For: New buyers                                    │
 │  ├─ Input: USDT payment                                │
-│  ├─ Function: buyAndStake(usdtAmount)                  │
-│  ├─ Price: Real-time (Chainlink/Manual)                │
-│  ├─ Auto-tier: Based on USDT amount                    │
-│  ├─ Anti-dump: OZONE stays in staking contract         │
-│  └─ Rewards: USDT only (presale buyers)                │
+│  ├─ Function: buyAndStake(poolId, usdtAmount)          │
+│  ├─ Price: Manual update from DigiFinex API            │
+│  ├─ Tax: 1% USDT platform fee (auto-deducted)          │
+│  ├─ Anti-dump: OZONE stays in contract                 │
+│  └─ Flow: USDT → Buy OZONE → Auto-stake                │
 │                                                         │
-│  🔗 Shared Features:                                    │
-│  ├─ 5 Tier pools (LimoX A/B/C, SaproX A/B)            │
-│  ├─ 6-10% monthly APY                                   │
-│  ├─ 300% max reward + auto-burn principal              │
-│  ├─ Claim every 15 days (any amount)                   │
-│  └─ Tier & APY locked at stake time                    │
+│  💎 STAKING FEATURE                                     │
+│  ├─ For: Existing OZONE holders                        │
+│  ├─ Input: OZONE tokens from wallet                    │
+│  ├─ Function: stake(poolId, ozoneAmount)               │
+│  ├─ Tax: 1% OZONE transfer tax (tracks original)       │
+│  ├─ Conversion: OZONE → USDT value (ozonePrice)        │
+│  └─ Flow: OZONE → Calculate USDT value → Stake         │
+│                                                         │
+│  🎁 REWARDS & CLAIMS                                    │
+│  ├─ Reward Type: USDT only (no OZONE option)           │
+│  ├─ APY: 6-10% monthly (based on pool)                 │
+│  ├─ Claim: Anytime after first stake                   │
+│  ├─ Calculation: Based on original USDT value          │
+│  └─ Distribution: From USDT reserve pool               │
+│                                                         │
+│  🔥 AUTO-BURN MECHANISM                                 │
+│  ├─ Trigger: Pool duration completed                   │
+│  ├─ Action: Burn principal OZONE tokens                │
+│  ├─ Benefit: Deflationary tokenomics                   │
+│  └─ User: Keeps all USDT rewards earned                │
+│                                                         │
+│  💰 TAX COLLECTION                                      │
+│  ├─ USDT Tax: 1% on buyAndStake (platform fee)         │
+│  ├─ OZONE Tax: 1% on stake (transfer tax)              │
+│  ├─ Tracking: originalAmount vs amount after tax       │
+│  ├─ Destination: Tax wallet (configurable)             │
+│  └─ Rewards: Based on originalAmount (pre-tax)         │
+│                                                         │
+│  🏆 POOL TIERS                                          │
+│  ├─ LimoX Pool A: $100-1K (6% APY)                     │
+│  ├─ LimoX Pool B: $1K-3K (7% APY)                      │
+│  ├─ LimoX Pool C: $3K-5K (8% APY)                      │
+│  ├─ SaproX Pool A: $5K-10K (9% APY)                    │
+│  └─ SaproX Pool B: $10K+ (10% APY)                     │
 │                                                         │
 └────────────────────────────────────────────────────────┘
 ```
@@ -77,121 +102,129 @@ OZONE Staking V2 adalah platform staking dual-reward dengan sistem tier otomatis
 
 ## ✨ Key Features
 
-### 🎯 **Auto-Tier System**
-Automatically assigns pool/tier based on USDT investment value:
-- No manual pool selection needed for presale buyers
-- Fair and transparent tier allocation
-- Bigger investment = Higher APY
+### 💰 **Integrated Presale & Staking**
+One contract handles both:
+- Buy OZONE with USDT → Auto-stake (1 transaction)
+- Stake existing OZONE → Earn USDT rewards
+- No need for separate presale contract
 
-### ⏰ **Time-Based Claiming**
-- Claim every **15 days** (any amount)
-- No minimum claim requirement
-- Rewards auto-accumulate if not claimed
+### 🏦 **Tax System**
+Automatic tax collection with transparent tracking:
+- **1% USDT Platform Fee** - Deducted from buyAndStake()
+- **1% OZONE Transfer Tax** - Deducted from stake()
+- Tax goes to configurable tax wallet
+- Rewards calculated on **original amount** (before tax)
 
-### 🔒 **Tier Locking**
-- Pool, APY, and USDT value **locked at stake time**
-- Price fluctuations don't affect your tier
-- Predictable and fair for all users
+### 🎁 **USDT-Only Rewards**
+Simplified reward system:
+- All rewards paid in USDT stablecoin
+- No OZONE reward option (removed for simplicity)
+- Predictable value, no price volatility
+- Easier for users to understand
 
-### 🤖 **Price Oracle Integration**
-Three price source options:
-1. **Manual** - Owner updates price (default, flexible)
-2. **Chainlink** - Fully automatic oracle (recommended)
-3. **DEX TWAP** - Time-weighted average price (future)
+### 🏆 **5 Pool Tiers**
+Manual pool selection with locked rates:
+- User chooses pool based on investment
+- APY locked at stake time (6-10% monthly)
+- Pool requirements: LimoX ($100-5K), SaproX ($5K-10K+)
 
-### 💰 **Dual Reward System**
-- **USDT rewards**: Stable income, predictable value
-- **OZONE rewards**: Ecosystem participation, potential upside
-- User chooses reward type per claim
+### ⏰ **Flexible Claiming**
+Claim anytime after first stake:
+- No minimum wait time
+- No maximum claim limit
+- Rewards accumulate continuously
+- Claim as often as you want
+
+### 🔒 **Security Features**
+- ReentrancyGuard on all critical functions
+- Pausable for emergency stops
+- UUPS upgradeable (fix bugs without migration)
+- OpenZeppelin battle-tested contracts
 
 ### 🔥 **Auto-Burn Mechanism**
-- Maximum reward: **300% of USDT value at stake**
-- Upon reaching 300%, principal OZONE tokens are **burned**
-- Deflationary mechanism benefits all holders
-- Net profit: 200% (3x reward - 1x principal)
+Deflationary tokenomics:
+- Principal OZONE burned when pool duration ends
+- Reduces circulating supply
+- Benefits all token holders
+- User keeps 100% of USDT rewards earned
 
-### 🔄 **UUPS Upgradeable**
-- Fix bugs without migration
-- Add features seamlessly
-- Same address forever
-- User funds always safe
+### 📊 **Transparent Tracking**
+Full visibility on tax impact:
+- `originalAmount`: Pre-tax amount (for reward calculation)
+- `amount`: Post-tax amount (after 1% deduction)
+- `usdtValueAtStake`: USDT equivalent locked in
 
 ---
 
 ## 📦 Contract Components
 
-### 1. OzoneStakingV2.sol
+### OzoneStakingV2.sol - Integrated Presale & Staking
 
-**Purpose**: Core staking platform for OZONE holders
+**Purpose**: Single contract handling both presale and staking with automatic tax collection
 
-**Key Functions**:
+**User Functions**:
 ```solidity
-// Manual staking by OZONE holders
-function stake(uint256 poolId, uint256 amount) external
+// Buy OZONE with USDT and auto-stake (1 transaction)
+// Note: 1% USDT platform fee auto-deducted
+function buyAndStake(uint256 poolId, uint256 baseUSDTAmount) external
 
-// Auto-staking via Presale contract
-function createStakeForUser(address user, uint256 poolId, uint256 ozoneAmount, uint256 usdtValue) external
+// Stake existing OZONE tokens manually
+// Note: 1% OZONE transfer tax auto-deducted
+function stake(uint256 poolId, uint256 ozoneAmount) external
 
-// Claim rewards (USDT by default)
+// Claim USDT rewards anytime
 function claimRewards(uint256 stakeIndex) external
 
-// Claim rewards with type selection
-function claimRewardsWithType(uint256 stakeIndex, RewardType rewardType) external
+// Get claimable rewards
+function calculateClaimableRewards(address user, uint256 stakeIndex) 
+    external view returns (uint256 claimableRewards)
 
-// Optional early unstake (before 300%)
-function unstake(uint256 stakeIndex) external
+// View user stakes
+function getUserStakes(address user) 
+    external view returns (Stake[] memory)
+
+// Get pool information
+function pools(uint256 poolId) 
+    external view returns (Pool memory)
 ```
 
 **Admin Functions**:
 ```solidity
-// Fund reserves
+// Fund USDT reserves for rewards
 function fundUSDTReserves(uint256 amount) external onlyOwner
-function fundOzoneReserves(uint256 amount) external onlyOwner
 
-// Price management
-function setOzonePrice(uint256 price) external onlyOwner
+// Price management (update from DigiFinex API)
+function setOzonePrice(uint256 _priceInUSDT) external onlyOwner
 
-// Authorize Presale contract
-function setAuthorizedStakeCreator(address creator, bool status) external onlyOwner
+// Tax wallet management
+function setTaxWallet(address _taxWallet) external onlyOwner
+
+// Treasury management
+function setTreasuryWallet(address _treasuryWallet) external onlyOwner
+
+// Presale control
+function setPresaleActive(bool _isActive) external onlyOwner
+function setPresaleSupply(uint256 _supply) external onlyOwner
+
+// Pool management
+function addPool(string memory name, uint256 monthlyAPY, uint256 durationDays, 
+                 uint256 minStakeUSDT, uint256 maxStakeUSDT) external onlyOwner
+function setPoolActive(uint256 poolId, bool isActive) external onlyOwner
+
+// Emergency
+function pause() external onlyOwner
+function unpause() external onlyOwner
 
 // Upgrade
 function upgradeTo(address newImplementation) external onlyOwner
 ```
 
----
-
-### 2. OzonePresaleV2.sol
-
-**Purpose**: Buy OZONE and auto-stake in one transaction
-
-**Key Functions**:
-```solidity
-// Buy OZONE and auto-stake
-function buyAndStake(uint256 usdtAmount) external
-
-// Calculate OZONE for USDT
-function calculateOzoneForUSDT(uint256 usdtAmount) external view returns (uint256 ozoneAmount, uint256 currentPrice, uint256 poolId)
-
-// Validate purchase
-function validatePurchase(uint256 usdtAmount) external view returns (bool isValid, string memory reason, uint256 ozoneAmount, uint256 poolId)
-
-// Get presale stats
-function getPresaleStats() external view returns (uint256 totalRaised, uint256 totalSold, uint256 totalBuyers, ...)
-```
-
-**Admin Functions**:
-```solidity
-// Price oracle management
-function setPriceSource(PriceSource source) external onlyOwner
-function setChainlinkPriceFeed(address priceFeed) external onlyOwner
-function updateManualPrice(uint256 newPrice) external onlyOwner
-
-// Supply management
-function addPresaleSupply(uint256 amount) external onlyOwner
-
-// Limits
-function updatePurchaseLimits(uint256 minUSDT, uint256 maxUSDT) external onlyOwner
-```
+**Important Notes**:
+- **USDT Decimals**: 18 (not 6!) - BEP-20 USDT on BSC uses 18 decimals
+- **OZONE Decimals**: 18
+- **Tax Tracking**: `originalAmount` (pre-tax) vs `amount` (post-tax)
+- **Rewards**: Always calculated from `originalAmount` (fair to users)
+- **Price**: Must be updated regularly from DigiFinex API via backend service
 
 ---
 
@@ -217,91 +250,132 @@ Max Reward (USDT) = USDT Value at Stake × 300%
 
 ### Example Calculation
 
-**Investment**: $5,000 USDT  
-**OZONE Price**: $0.85  
-**OZONE Amount**: 5,882 OZONE  
-**Pool**: SaproX Pool A (9% APY)
+**Investment**: $5,000 USDT (via buyAndStake)  
+**OZONE Price**: $91 (from DigiFinex)  
+**Pool**: SaproX Pool A (9% monthly APY, 360 days)
 
 ```
-Daily Reward = (5000 × 900) / 10,000 / 30 = $15 USDT/day
-Monthly Reward = $15 × 30 = $450 USDT
-Max Reward = $5,000 × 300% = $15,000 USDT
-Time to Max = $15,000 / $450 = 33.3 months
+// Step 1: Calculate costs
+Base Amount = $5,000 USDT
+Platform Fee (1%) = $50 USDT → Tax Wallet
+Net to Treasury = $4,950 USDT
 
-Timeline:
-- Month 1-33: Earn $450/month
-- After 33 months: Total earned $15,000
-- Auto-burn: 5,882 OZONE principal burned 🔥
-- Net Profit: $10,000 (200% gain)
+// Step 2: Calculate OZONE
+OZONE Received = $5,000 / $91 = 54.95 OZONE
+Staked to Pool = 54.95 OZONE
+
+// Step 3: Calculate rewards
+Monthly APY = 9% (900 basis points)
+Monthly Reward = $5,000 × 9% = $450 USDT/month
+Pool Duration = 360 days (12 months)
+Total Rewards = $450 × 12 = $5,400 USDT
+
+// Step 4: Final outcome
+After 360 days:
+- Total USDT earned: $5,400 USDT
+- Principal OZONE: 54.95 OZONE burned 🔥
+- Net Profit: $400 USDT (8% ROI after burn)
+- User keeps: $5,400 USDT in wallet
+```
+
+**Tax Breakdown**:
+```
+User pays: $5,050 USDT total
+├─ $5,000 → buyAndStake(poolId, 5000e18)
+├─ $50 → 1% platform fee (auto-deducted)
+└─ Total approved: 5050e18 (base + 1%)
+
+Distribution:
+├─ $50 → Tax Wallet (1% USDT fee)
+├─ $4,950 → Treasury Wallet (net presale revenue)
+└─ 54.95 OZONE → Staked in contract (never to user wallet)
 ```
 
 ---
 
 ## 👤 User Flow
 
-### For New Buyers (Presale)
+### For New Buyers (via buyAndStake)
 
 ```javascript
-// 1. Check investment outcome
-const [ozoneAmount, price, poolId] = await presaleV2.calculateOzoneForUSDT(
-    ethers.utils.parseUnits("5000", 6) // $5,000 USDT
-);
-// Returns: 5882 OZONE, $0.85 price, Pool 4 (SaproX Pool A)
+// 1. Get current OZONE price
+const price = await stakingV2.ozonePrice();
+console.log("OZONE Price:", ethers.utils.formatEther(price), "USDT");
+// Example: $91.00
 
-// 2. Validate purchase
-const [isValid, reason] = await presaleV2.validatePurchase(
-    ethers.utils.parseUnits("5000", 6)
-);
-// Returns: true, "Valid purchase"
+// 2. Calculate costs
+const baseAmount = ethers.utils.parseEther("5000"); // $5,000 USDT
+const taxAmount = baseAmount.mul(100).div(10000); // 1% = $50
+const totalCost = baseAmount.add(taxAmount); // $5,050 total
+const ozoneAmount = baseAmount.mul(ethers.utils.parseEther("1")).div(price);
+console.log("OZONE to receive:", ethers.utils.formatEther(ozoneAmount));
+// Example: 54.95 OZONE
 
-// 3. Approve USDT
-await usdtToken.approve(presaleAddress, ethers.utils.parseUnits("5000", 6));
+// 3. Approve USDT (total cost including tax)
+await usdtToken.approve(stakingV2Address, totalCost);
 
 // 4. Buy and auto-stake (ONE TRANSACTION!)
-await presaleV2.buyAndStake(ethers.utils.parseUnits("5000", 6));
+await stakingV2.buyAndStake(
+    4, // SaproX Pool A
+    baseAmount // $5,000 (tax added automatically)
+);
 
 // Result:
-// ✅ $5,000 USDT → Treasury
-// ✅ 5,882 OZONE bought
-// ✅ Auto-staked to SaproX Pool A
-// ✅ Earning $15/day (~$450/month)
+// ✅ $5,050 USDT deducted from wallet
+// ✅ $50 → Tax Wallet (1% platform fee)
+// ✅ $5,000 → Treasury Wallet
+// ✅ 54.95 OZONE staked to SaproX Pool A
+// ✅ Earning $450/month in USDT
 // ✅ OZONE never touched wallet (anti-dump!)
 ```
 
-### For Existing OZONE Holders (Staking)
+### For Existing OZONE Holders (via stake)
 
 ```javascript
-// 1. Approve OZONE
-await ozoneToken.approve(stakingAddress, ethers.utils.parseEther("5882"));
+// 1. Check OZONE balance
+const balance = await ozoneToken.balanceOf(userAddress);
+const stakeAmount = ethers.utils.parseEther("100"); // 100 OZONE
 
-// 2. Choose pool and stake
+// 2. Calculate tax
+const taxAmount = stakeAmount.mul(100).div(10000); // 1% = 1 OZONE
+const netStake = stakeAmount.sub(taxAmount); // 99 OZONE staked
+
+// 3. Get USDT value for rewards
+const price = await stakingV2.ozonePrice(); // $91
+const usdtValue = stakeAmount.mul(price).div(ethers.utils.parseEther("1"));
+console.log("USDT Value:", ethers.utils.formatEther(usdtValue));
+// Example: $9,100 USDT equivalent
+
+// 4. Approve OZONE
+await ozoneToken.approve(stakingV2Address, stakeAmount);
+
+// 5. Stake to chosen pool
 await stakingV2.stake(
-    4, // SaproX Pool A
-    ethers.utils.parseEther("5882")
+    4, // SaproX Pool A (9% APY)
+    stakeAmount // 100 OZONE
 );
 
-// 3. Wait 15 days
-
-// 4. Claim rewards
-await stakingV2.claimRewardsWithType(
-    0, // stake index
-    0  // RewardType.USDT_ONLY
-);
-// Or choose OZONE rewards:
-await stakingV2.claimRewardsWithType(0, 1); // RewardType.OZONE_ONLY
+// Result:
+// ✅ 100 OZONE deducted from wallet
+// ✅ 1 OZONE → Tax Wallet (1% transfer tax)
+// ✅ 99 OZONE staked in contract
+// ✅ Rewards based on 100 OZONE (originalAmount)
+// ✅ Earning based on $9,100 USDT value
 ```
 
-### Claim Schedule
+### Claim Rewards
 
-```
-Day 0: Stake $5,000 worth
-Day 15: Can claim ~$225 USDT ✅
-Day 30: Can claim ~$225 USDT ✅
-Day 45: Can claim ~$225 USDT ✅
-...
-Day 1000: Reached $15,000 total
-        → Principal auto-burned 🔥
-        → Stake completed
+```javascript
+// 1. Check claimable rewards
+const rewards = await stakingV2.calculateClaimableRewards(userAddress, 0);
+console.log("Claimable:", ethers.utils.formatEther(rewards), "USDT");
+
+// 2. Claim anytime (no minimum wait)
+await stakingV2.claimRewards(0); // stake index 0
+
+// 3. USDT sent to your wallet
+// ✅ Rewards paid in USDT only
+// ✅ No OZONE option (simplified)
 ```
 
 ---
