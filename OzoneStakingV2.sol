@@ -9,19 +9,20 @@ pragma solidity ^0.8.20;
 ╚██████╔╝███████╗╚██████╔╝██║ ╚████║███████╗
  ╚═════╝ ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
 
-    🏭 OZONE STAKING V2 - Dual Reward Staking Platform
+    🏭 OZONE STAKING V2 - Integrated Presale & Staking Platform
     
     ════════════════════════════════════════════════════════════════════
-    │  🎯 Auto-Tier System: 5 Pools Based on USDT Value              │
-    │  💰 LimoX Pools: $100-$5,000 (6-8% Monthly APY)                │
-    │  💎 SaproX Pools: $5,001+ (9-10% Monthly APY)                  │
+    │  🛒 Buy & Stake: One-Click Purchase + Auto-Stake               │
+    │  🎯 Manual Pool Selection: Choose Your Tier (LimoX/SaproX)    │
+    │  💰 LimoX Pools: 6-8% Monthly APY                              │
+    │  💎 SaproX Pools: 9-10% Monthly APY                            │
     │  ⏰ Claim Every 15 Days (Time-Based)                            │
-    │  🔥 Auto-Burn Principal at 300% Max Reward                     │
+    │  🔥 Duration-Based Auto-Burn: (300% ÷ APY) Months             │
     │  🔄 UUPS Upgradeable for Future Enhancements                   │
     ════════════════════════════════════════════════════════════════════
     
-    💡 Stake OZONE → Earn USDT or OZONE rewards daily
-       Tier locked at stake time for fairness & predictability
+    💡 Buy OZONE with USDT → Auto-stake to selected pool → Earn USDT daily
+       Duration locked: 6% APY = 50 months, 10% APY = 30 months
 */
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -37,9 +38,9 @@ interface IOZONEToken {
 }
 
 /**
- * @title OzoneStakingV2 - Production Dual Reward Staking Platform
- * @dev UUPS Upgradeable staking system with auto-tier and time-based claims
- * @notice Gas-optimized deployment for BSC Mainnet (v2.0 - Upgradeable)
+ * @title OzoneStakingV2 - Integrated Presale & Staking Platform
+ * @dev UUPS Upgradeable system with presale + manual pool selection + time-based claims
+ * @notice Gas-optimized single contract for BSC Mainnet (v2.0 - Upgradeable)
  * @author OZONE Team - December 2025
  */
 contract OzoneStakingV2 is 
@@ -55,15 +56,7 @@ contract OzoneStakingV2 is
     // =============================================================================
     
     /**
-     * @dev Reward type selection for dual reward system
-     */
-    enum RewardType {
-        USDT_ONLY,    // 0: User receives rewards in USDT
-        OZONE_ONLY    // 1: User receives rewards in OZONE
-    }
-    
-    /**
-     * @dev Pool structure dengan dual reward capabilities
+     * @dev Pool structure dengan USDT-only rewards
      */
     struct Pool {
         string name;                    // Pool name (e.g., "LimoX Pool A")
@@ -77,7 +70,7 @@ contract OzoneStakingV2 is
         uint256 totalClaimed;          // Total rewards claimed dari pool ini
         bool isActive;                 // Pool active status
         uint256 createdAt;             // Pool creation timestamp
-        bool allowOzoneRewards;        // Allow OZONE rewards option
+        uint256 durationMonths;        // Duration in months (300 / APY)
     }
     
     /**
@@ -95,9 +88,8 @@ contract OzoneStakingV2 is
         uint256 nextClaimTime;         // Next available claim time
         bool isActive;                 // Stake active status
         bool isBurned;                 // Auto-burned status
-        uint256 totalUsdtClaimed;      // Total USDT rewards claimed
-        uint256 totalOzoneClaimed;     // Total OZONE rewards claimed
-        RewardType preferredRewardType; // User's preferred reward type
+        uint256 endTime;               // Expected end time (duration-based)
+        bool isFromPresale;            // Whether stake is from presale
     }
     
     // =============================================================================
@@ -117,45 +109,49 @@ contract OzoneStakingV2 is
     
     // Reserve Management
     uint256 public stakingUSDTReserves;      // USDT reserves untuk staking rewards
-    uint256 public ozoneReserves;            // OZONE reserves untuk dual rewards
     uint256 public totalStakingDistributed;  // Total USDT distributed
-    uint256 public totalOzoneDistributed;    // Total OZONE distributed
     uint256 public totalTokensBurned;        // Total OZONE burned
     uint256 public activeStakeCount;         // Active stakes count
     
-    // Authorization untuk Presale Contract
-    mapping(address => bool) public authorizedStakeCreators;
+    // Presale Management
+    uint256 public presaleSupply;            // Available OZONE for presale
+    uint256 public totalPresaleSold;         // Total OZONE sold via presale
+    address public treasuryWallet;           // Treasury wallet for USDT
+    address public taxWallet;                // Tax wallet for platform fees (1% USDT)
+    bool public presaleActive;               // Presale active status
     
     // Constants - Production Configuration
     uint256 public constant MAX_REWARD_PERCENTAGE = 30000; // 300% maximum
     uint256 public constant CLAIM_INTERVAL = 15 days;      // 15 days claim interval
     uint256 public constant MONTH_DURATION = 30 days;      // 30 days = 1 month
+    uint256 public constant PURCHASE_TAX_RATE = 100;       // 1% platform fee (100 basis points)
+    uint256 public constant BASIS_POINTS = 10000;          // 100% = 10000 basis points
     
     // Price Management
     uint256 public ozonePrice; // OZONE price in USDT (18 decimals)
     
     // Contract Version
-    string public constant VERSION = "2.0.0-UUPS"; // Upgradeable version
+    string public constant VERSION = "2.0.0-Integrated"; // Single contract with presale
     
     // =============================================================================
     // EVENTS
     // =============================================================================
     
     // Staking Events
-    event UserStaked(address indexed user, uint256 indexed poolId, uint256 ozoneAmount, uint256 usdtValue, uint256 stakeIndex);
-    event StakeCreatedForUser(address indexed user, address indexed creator, uint256 poolId, uint256 ozoneAmount, uint256 usdtValue);
+    event UserStaked(address indexed user, uint256 indexed poolId, uint256 ozoneAmount, uint256 usdtValue, uint256 stakeIndex, bool fromPresale);
     event UserUnstaked(address indexed user, uint256 indexed stakeIndex, uint256 amount);
     
     // Reward Events
-    event RewardClaimed(
-        address indexed user,
-        uint256 indexed stakeIndex,
-        uint256 baseRewards,
-        uint256 usdtAmount,
-        uint256 ozoneAmount,
-        RewardType rewardType
-    );
+    event RewardClaimed(address indexed user, uint256 indexed stakeIndex, uint256 usdtAmount, uint256 totalClaimed);
     event TokensAutoBurned(address indexed user, uint256 indexed stakeIndex, uint256 burnedAmount, uint256 totalRewardsClaimed);
+    
+    // Presale Events
+    event PresalePurchase(address indexed buyer, uint256 indexed poolId, uint256 usdtPaid, uint256 ozoneReceived, uint256 stakeIndex);
+    event PresaleSupplyAdded(uint256 amount, uint256 newTotal);
+    event TreasuryWalletUpdated(address indexed oldWallet, address indexed newWallet);
+    event TaxWalletUpdated(address indexed oldWallet, address indexed newWallet);
+    event PurchaseTaxCollected(address indexed buyer, uint256 taxAmount);
+    event PresaleStatusChanged(bool active);
     
     // Pool Events
     event PoolCreated(uint256 indexed poolId, string name, uint256 monthlyAPY, uint256 minUSDT, uint256 maxUSDT);
@@ -165,14 +161,9 @@ contract OzoneStakingV2 is
     // Reserve Events
     event USDTReservesFunded(uint256 amount);
     event USDTReservesWithdrawn(uint256 amount);
-    event OzoneReservesFunded(uint256 amount);
-    event OzoneReservesWithdrawn(uint256 amount);
     
     // Price Events
     event OzonePriceUpdated(uint256 oldPrice, uint256 newPrice, uint256 timestamp);
-    
-    // Authorization Events
-    event AuthorizedStakeCreatorUpdated(address indexed creator, bool status);
     
     // Upgrade Events
     event ContractUpgraded(address indexed newImplementation, uint256 timestamp);
@@ -193,11 +184,16 @@ contract OzoneStakingV2 is
         address _ozoneToken,
         address _usdtToken,
         address _ozoneContract,
-        uint256 _initialOzonePrice
+        uint256 _initialOzonePrice,
+        address _treasuryWallet,
+        address _taxWallet,
+        uint256 _initialPresaleSupply
     ) public initializer {
         require(_ozoneToken != address(0), "Invalid OZONE token");
         require(_usdtToken != address(0), "Invalid USDT token");
         require(_ozoneContract != address(0), "Invalid OZONE contract");
+        require(_treasuryWallet != address(0), "Invalid treasury wallet");
+        require(_taxWallet != address(0), "Invalid tax wallet");
         require(_initialOzonePrice > 0, "Invalid price");
         
         __Ownable_init(msg.sender);
@@ -209,6 +205,10 @@ contract OzoneStakingV2 is
         usdtToken = IERC20(_usdtToken);
         ozoneContract = IOZONEToken(_ozoneContract);
         ozonePrice = _initialOzonePrice;
+        treasuryWallet = _treasuryWallet;
+        taxWallet = _taxWallet;
+        presaleSupply = _initialPresaleSupply;
+        presaleActive = true;
         
         nextPoolId = 1;
         totalPools = 0;
@@ -218,66 +218,61 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @dev Initialize default 5-tier pool system
+     * @dev Initialize default 5-tier pool system (same as original)
      */
     function _initializePools() private {
-        // LimoX Pool A: $100 - $1,000 (6% monthly APY)
+        // LimoX Pool A: 100-10,000 OZONE (6% monthly APY) = 50 months duration
         _createPool(
             "LimoX Pool A",
-            600,                    // 6% APY
-            100 * 10**6,           // Min $100 USDT
-            1000 * 10**6,          // Max $1,000 USDT
+            600,                        // 6% APY
+            100 * 10**18,              // Min 100 OZONE
+            10000 * 10**18,            // Max 10,000 OZONE
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
-            true,                   // enableAutoBurn
-            true                    // allowOzoneRewards
+            true                        // enableAutoBurn
         );
         
-        // LimoX Pool B: $1,001 - $3,000 (7% monthly APY)
+        // LimoX Pool B: 10,001-25,000 OZONE (7% monthly APY) = ~43 months duration
         _createPool(
             "LimoX Pool B",
-            700,                    // 7% APY
-            1001 * 10**6,          // Min $1,001 USDT
-            3000 * 10**6,          // Max $3,000 USDT
+            700,                        // 7% APY
+            10001 * 10**18,            // Min 10,001 OZONE
+            25000 * 10**18,            // Max 25,000 OZONE
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
-            true,
             true
         );
         
-        // LimoX Pool C: $3,001 - $5,000 (8% monthly APY)
+        // LimoX Pool C: 25,001-50,000 OZONE (8% monthly APY) = 37.5 months duration
         _createPool(
             "LimoX Pool C",
-            800,                    // 8% APY
-            3001 * 10**6,          // Min $3,001 USDT
-            5000 * 10**6,          // Max $5,000 USDT
+            800,                        // 8% APY
+            25001 * 10**18,            // Min 25,001 OZONE
+            50000 * 10**18,            // Max 50,000 OZONE
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
-            true,
             true
         );
         
-        // SaproX Pool A: $5,001 - $10,000 (9% monthly APY)
+        // SaproX Pool A: 50,001-100,000 OZONE (9% monthly APY) = ~33 months duration
         _createPool(
             "SaproX Pool A",
-            900,                    // 9% APY
-            5001 * 10**6,          // Min $5,001 USDT
-            10000 * 10**6,         // Max $10,000 USDT
+            900,                        // 9% APY
+            50001 * 10**18,            // Min 50,001 OZONE
+            100000 * 10**18,           // Max 100,000 OZONE
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
-            true,
             true
         );
         
-        // SaproX Pool B: $10,001+ (10% monthly APY)
+        // SaproX Pool B: 100,001+ OZONE (10% monthly APY) = 30 months duration
         _createPool(
             "SaproX Pool B",
-            1000,                   // 10% APY
-            10001 * 10**6,         // Min $10,001 USDT
-            0,                      // No max (unlimited)
+            1000,                       // 10% APY
+            100001 * 10**18,           // Min 100,001 OZONE
+            0,                          // No max (unlimited)
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
-            true,
             true
         );
     }
@@ -292,20 +287,22 @@ contract OzoneStakingV2 is
     function _createPool(
         string memory _name,
         uint256 _monthlyAPY,
-        uint256 _minStakeUSDT,
-        uint256 _maxStakeUSDT,
+        uint256 _minStake,
+        uint256 _maxStake,
         uint256 _claimInterval,
         uint256 _maxRewardPercent,
-        bool _enableAutoBurn,
-        bool _allowOzoneRewards
+        bool _enableAutoBurn
     ) private {
         uint256 poolId = nextPoolId;
+        
+        // Calculate duration in months: 300 / APY
+        uint256 durationMonths = (MAX_REWARD_PERCENTAGE * 100) / _monthlyAPY;
         
         pools[poolId] = Pool({
             name: _name,
             monthlyAPY: _monthlyAPY,
-            minStakeUSDT: _minStakeUSDT,
-            maxStakeUSDT: _maxStakeUSDT,
+            minStakeUSDT: _minStake,
+            maxStakeUSDT: _maxStake,
             claimInterval: _claimInterval,
             maxRewardPercent: _maxRewardPercent,
             enableAutoBurn: _enableAutoBurn,
@@ -313,13 +310,13 @@ contract OzoneStakingV2 is
             totalClaimed: 0,
             isActive: true,
             createdAt: block.timestamp,
-            allowOzoneRewards: _allowOzoneRewards
+            durationMonths: durationMonths
         });
         
         nextPoolId++;
         totalPools++;
         
-        emit PoolCreated(poolId, _name, _monthlyAPY, _minStakeUSDT, _maxStakeUSDT);
+        emit PoolCreated(poolId, _name, _monthlyAPY, _minStake, _maxStake);
     }
     
     /**
@@ -329,27 +326,18 @@ contract OzoneStakingV2 is
         uint256 _poolId,
         string memory _name,
         uint256 _monthlyAPY,
-        uint256 _minStakeUSDT,
-        uint256 _maxStakeUSDT,
-        uint256 _claimInterval,
-        uint256 _maxRewardPercent,
-        bool _enableAutoBurn,
-        bool _allowOzoneRewards
+        uint256 _minStake,
+        uint256 _maxStake
     ) external onlyOwner {
         require(_poolId > 0 && _poolId < nextPoolId, "Pool does not exist");
         require(_monthlyAPY > 0 && _monthlyAPY <= 10000, "Invalid APY");
-        require(_claimInterval >= 1 days, "Claim interval too short");
-        require(_maxRewardPercent >= 10000, "Max reward must be at least 100%");
         
         Pool storage pool = pools[_poolId];
         pool.name = _name;
         pool.monthlyAPY = _monthlyAPY;
-        pool.minStakeUSDT = _minStakeUSDT;
-        pool.maxStakeUSDT = _maxStakeUSDT;
-        pool.claimInterval = _claimInterval;
-        pool.maxRewardPercent = _maxRewardPercent;
-        pool.enableAutoBurn = _enableAutoBurn;
-        pool.allowOzoneRewards = _allowOzoneRewards;
+        pool.minStakeUSDT = _minStake;
+        pool.maxStakeUSDT = _maxStake;
+        pool.durationMonths = (MAX_REWARD_PERCENTAGE * 100) / _monthlyAPY;
         
         emit PoolUpdated(_poolId, _name, _monthlyAPY);
     }
@@ -363,32 +351,69 @@ contract OzoneStakingV2 is
         emit PoolDeactivated(_poolId, _reason);
     }
     
+    // =============================================================================
+    // PRESALE & STAKING FUNCTIONS
+    // =============================================================================
+    
     /**
-     * @dev Determine pool ID berdasarkan USDT value (auto-tier selection)
+     * @dev Buy OZONE with USDT and auto-stake to selected pool (ONE-CLICK)
+     * @param _poolId Pool ID yang dipilih user (manual selection)
+     * @param _usdtAmount Amount of USDT to spend
      */
-    function determinePoolByUSDTValue(uint256 usdtValue) public view returns (uint256) {
-        // Check from highest tier to lowest
-        for (uint256 i = nextPoolId - 1; i >= 1; i--) {
-            Pool memory pool = pools[i];
-            if (!pool.isActive) continue;
-            
-            // Check if USDT value fits in this pool's range
-            if (usdtValue >= pool.minStakeUSDT) {
-                if (pool.maxStakeUSDT == 0 || usdtValue <= pool.maxStakeUSDT) {
-                    return i;
-                }
-            }
+    function buyAndStake(uint256 _poolId, uint256 _usdtAmount) external nonReentrant whenNotPaused {
+        require(presaleActive, "Presale not active");
+        require(_poolId > 0 && _poolId < nextPoolId, "Pool does not exist");
+        require(_usdtAmount > 0, "Amount must be greater than 0");
+        
+        Pool memory pool = pools[_poolId];
+        require(pool.isActive, "Pool is not active");
+        
+        // Calculate 1% platform fee
+        uint256 taxAmount = (_usdtAmount * PURCHASE_TAX_RATE) / BASIS_POINTS; // 1% tax
+        uint256 totalCost = _usdtAmount + taxAmount; // User pays base price + 1% fee
+        
+        // Check user's USDT balance and allowance for total cost
+        require(usdtToken.balanceOf(msg.sender) >= totalCost, "Insufficient USDT balance");
+        require(usdtToken.allowance(msg.sender, address(this)) >= totalCost, "Insufficient USDT allowance");
+        
+        // Calculate OZONE amount to receive (based on base price, not including tax)
+        uint256 ozoneAmount = (_usdtAmount * 10**18) / ozonePrice;
+        require(ozoneAmount > 0, "Invalid OZONE amount");
+        
+        // Check presale supply
+        require(ozoneAmount <= presaleSupply, "Insufficient presale supply");
+        
+        // Validate pool min/max (dalam OZONE tokens)
+        require(ozoneAmount >= pool.minStakeUSDT, "Below minimum stake for this pool");
+        if (pool.maxStakeUSDT > 0) {
+            require(ozoneAmount <= pool.maxStakeUSDT, "Above maximum stake for this pool");
         }
         
-        revert("No suitable pool found for USDT value");
+        // Transfer USDT: base price to treasury, tax to tax wallet
+        require(usdtToken.transferFrom(msg.sender, treasuryWallet, _usdtAmount), "Base USDT transfer failed");
+        require(usdtToken.transferFrom(msg.sender, taxWallet, taxAmount), "Tax USDT transfer failed");
+        
+        // Update presale stats
+        presaleSupply -= ozoneAmount;
+        totalPresaleSold += ozoneAmount;
+        
+        // Calculate USDT value at current price for staking record (base price only, excluding tax)
+        uint256 usdtValue = _usdtAmount;
+        
+        // Create stake entry (OZONE stays in contract)
+        // For presale, no OZONE transfer tax, so amount = originalAmount
+        _createStakeEntry(msg.sender, _poolId, ozoneAmount, ozoneAmount, usdtValue, pool.monthlyAPY, true);
+        
+        uint256 stakeIndex = userStakes[msg.sender].length - 1;
+        
+        emit PresalePurchase(msg.sender, _poolId, _usdtAmount, ozoneAmount, stakeIndex);
+        emit PurchaseTaxCollected(msg.sender, taxAmount);
+        emit UserStaked(msg.sender, _poolId, ozoneAmount, usdtValue, stakeIndex, true);
     }
     
-    // =============================================================================
-    // STAKING FUNCTIONS
-    // =============================================================================
-    
     /**
-     * @dev Stake OZONE tokens ke pool tertentu (manual selection by OZONE holders)
+     * @dev Stake OZONE tokens ke pool tertentu (manual selection by existing OZONE holders)
+     * @notice OZONE token has 1% transfer tax - contract receives 99%, but rewards calculated on 100%
      */
     function stake(uint256 _poolId, uint256 _amount) external nonReentrant whenNotPaused {
         require(_poolId > 0 && _poolId < nextPoolId, "Pool does not exist");
@@ -397,56 +422,29 @@ contract OzoneStakingV2 is
         Pool memory pool = pools[_poolId];
         require(pool.isActive, "Pool is not active");
         
-        // Calculate USDT value berdasarkan current OZONE price
-        uint256 usdtValue = (_amount * ozonePrice) / 10**18;
-        
-        // Validate USDT value fits pool range
-        require(usdtValue >= pool.minStakeUSDT, "Below minimum stake for this pool");
+        // Validate pool min/max (dalam OZONE tokens - based on original amount)
+        require(_amount >= pool.minStakeUSDT, "Below minimum stake for this pool");
         if (pool.maxStakeUSDT > 0) {
-            require(usdtValue <= pool.maxStakeUSDT, "Above maximum stake for this pool");
+            require(_amount <= pool.maxStakeUSDT, "Above maximum stake for this pool");
         }
         
-        // Transfer OZONE from user
+        // Calculate after-tax amount (OZONE has 1% transfer tax)
+        // Contract will receive 99%, but we track the original 100% for reward calculation
+        uint256 afterTaxAmount = (_amount * 99) / 100;
+        
+        // Transfer OZONE from user (user sends _amount, contract receives afterTaxAmount due to 1% tax)
         require(ozoneToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
         
-        // Create stake entry
-        _createStakeEntry(msg.sender, _poolId, _amount, _amount, usdtValue, pool.monthlyAPY);
+        // Calculate USDT value berdasarkan original amount (before tax) at current OZONE price
+        // This ensures rewards are calculated fairly on the full amount user intended to stake
+        uint256 usdtValue = (_amount * ozonePrice) / 10**18;
         
-        emit UserStaked(msg.sender, _poolId, _amount, usdtValue, userStakes[msg.sender].length - 1);
-    }
-    
-    /**
-     * @dev Create stake for user (called by authorized contracts like Presale)
-     * @notice This function allows Presale contract to create stakes on behalf of users
-     */
-    function createStakeForUser(
-        address _user,
-        uint256 _poolId,
-        uint256 _ozoneAmount,
-        uint256 _usdtValue
-    ) external nonReentrant whenNotPaused {
-        require(authorizedStakeCreators[msg.sender], "Not authorized to create stakes");
-        require(_user != address(0), "Invalid user address");
-        require(_poolId > 0 && _poolId < nextPoolId, "Pool does not exist");
-        require(_ozoneAmount > 0, "Amount must be greater than 0");
-        require(_usdtValue > 0, "USDT value must be greater than 0");
+        // Create stake entry:
+        // - amount: afterTaxAmount (what contract actually received - 99%)
+        // - originalAmount: _amount (what user sent - 100%, used for reward calculation)
+        _createStakeEntry(msg.sender, _poolId, afterTaxAmount, _amount, usdtValue, pool.monthlyAPY, false);
         
-        Pool memory pool = pools[_poolId];
-        require(pool.isActive, "Pool is not active");
-        
-        // Validate USDT value fits pool range
-        require(_usdtValue >= pool.minStakeUSDT, "Below minimum stake for this pool");
-        if (pool.maxStakeUSDT > 0) {
-            require(_usdtValue <= pool.maxStakeUSDT, "Above maximum stake for this pool");
-        }
-        
-        // Transfer OZONE from caller (Presale contract should have the tokens)
-        require(ozoneToken.transferFrom(msg.sender, address(this), _ozoneAmount), "Transfer failed");
-        
-        // Create stake entry
-        _createStakeEntry(_user, _poolId, _ozoneAmount, _ozoneAmount, _usdtValue, pool.monthlyAPY);
-        
-        emit StakeCreatedForUser(_user, msg.sender, _poolId, _ozoneAmount, _usdtValue);
+        emit UserStaked(msg.sender, _poolId, _amount, usdtValue, userStakes[msg.sender].length - 1, false);
     }
     
     /**
@@ -458,8 +456,14 @@ contract OzoneStakingV2 is
         uint256 _amount,
         uint256 _originalAmount,
         uint256 _usdtValue,
-        uint256 _lockedAPY
+        uint256 _lockedAPY,
+        bool _fromPresale
     ) private {
+        // Calculate expected end time based on duration
+        Pool memory pool = pools[_poolId];
+        uint256 durationSeconds = pool.durationMonths * MONTH_DURATION;
+        uint256 endTime = block.timestamp + durationSeconds;
+        
         userStakes[_user].push(UserStake({
             amount: _amount,
             originalAmount: _originalAmount,
@@ -472,9 +476,8 @@ contract OzoneStakingV2 is
             nextClaimTime: block.timestamp + CLAIM_INTERVAL,
             isActive: true,
             isBurned: false,
-            totalUsdtClaimed: 0,
-            totalOzoneClaimed: 0,
-            preferredRewardType: RewardType.USDT_ONLY // Default to USDT
+            endTime: endTime,
+            isFromPresale: _fromPresale
         }));
         
         pools[_poolId].totalStaked += _amount;
@@ -486,11 +489,11 @@ contract OzoneStakingV2 is
     // =============================================================================
     
     /**
-     * @dev Calculate available rewards untuk stake tertentu
-     * @notice Rewards calculated daily based on locked APY at stake time
+     * @dev Calculate available USDT rewards untuk stake tertentu
+     * @notice Rewards calculated daily based on USDT value at stake (fixed, tidak terpengaruh harga OZONE)
      */
     function calculateAvailableRewards(address _user, uint256 _stakeIndex) 
-        public view returns (uint256 claimableRewards, bool shouldAutoBurn) {
+        public view returns (uint256 claimableRewardsUSDT, bool shouldAutoBurn) {
         require(_stakeIndex < userStakes[_user].length, "Invalid stake index");
         
         UserStake memory userStake = userStakes[_user][_stakeIndex];
@@ -502,13 +505,11 @@ contract OzoneStakingV2 is
         
         if (daysElapsed == 0) return (0, false);
         
-        // Calculate daily reward using LOCKED APY
-        // Daily reward = (originalAmount * lockedAPY) / 10000 / 30
-        uint256 dailyReward = (userStake.originalAmount * userStake.lockedAPY) / 10000 / 30;
-        uint256 totalReward = dailyReward * daysElapsed;
-        
-        // Calculate USDT value of rewards
-        uint256 totalRewardUSDT = (totalReward * ozonePrice) / 10**18;
+        // Calculate daily reward directly from USDT value at stake
+        // Daily reward USDT = (usdtValueAtStake * lockedAPY) / 10000 / 30
+        // Contoh: $1000 USDT × 6% APY = $60/bulan = $2/hari
+        uint256 dailyRewardUSDT = (userStake.usdtValueAtStake * userStake.lockedAPY) / 10000 / 30;
+        uint256 totalRewardUSDT = dailyRewardUSDT * daysElapsed;
         
         // Check maximum reward (300% of USDT value at stake)
         uint256 maxRewardUSDT = (userStake.usdtValueAtStake * MAX_REWARD_PERCENTAGE) / 10000;
@@ -518,33 +519,14 @@ contract OzoneStakingV2 is
             totalRewardUSDT = remainingRewardUSDT;
         }
         
-        // Check if should auto-burn
+        // Check if duration has passed (auto-burn condition)
         shouldAutoBurn = false;
         Pool memory pool = pools[userStake.poolId];
-        if (pool.enableAutoBurn && userStake.totalClaimedReward + totalRewardUSDT >= maxRewardUSDT) {
+        if (pool.enableAutoBurn && block.timestamp >= userStake.endTime) {
             shouldAutoBurn = true;
         }
         
         return (totalRewardUSDT, shouldAutoBurn);
-    }
-    
-    /**
-     * @dev Calculate reward distribution berdasarkan reward type
-     */
-    function calculateRewardDistribution(
-        uint256 _baseRewardsUSDT,
-        RewardType _rewardType
-    ) public view returns (uint256 usdtAmount, uint256 ozoneAmount) {
-        
-        if (_rewardType == RewardType.USDT_ONLY) {
-            usdtAmount = _baseRewardsUSDT;
-            ozoneAmount = 0;
-            
-        } else if (_rewardType == RewardType.OZONE_ONLY) {
-            usdtAmount = 0;
-            // Convert USDT value to OZONE amount
-            ozoneAmount = (_baseRewardsUSDT * 10**18) / ozonePrice;
-        }
     }
     
     // =============================================================================
@@ -565,72 +547,37 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @dev Claim rewards dengan default USDT_ONLY (backward compatible)
+     * @dev Claim USDT rewards
      */
-    function claimRewards(uint256 _stakeIndex) external nonReentrant {
-        _claimRewards(_stakeIndex, RewardType.USDT_ONLY);
-    }
-    
-    /**
-     * @dev Claim rewards dengan reward type selection
-     */
-    function claimRewardsWithType(uint256 _stakeIndex, RewardType _rewardType) 
-        external nonReentrant {
-        _claimRewards(_stakeIndex, _rewardType);
-    }
-    
-    /**
-     * @dev Internal claim logic
-     */
-    function _claimRewards(uint256 _stakeIndex, RewardType _rewardType) internal whenNotPaused {
+    function claimRewards(uint256 _stakeIndex) external nonReentrant whenNotPaused {
         require(_stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
         require(canClaim(msg.sender, _stakeIndex), "Cannot claim yet - must wait 15 days");
         
         UserStake storage userStake = userStakes[msg.sender][_stakeIndex];
         Pool memory pool = pools[userStake.poolId];
         
-        // Validate reward type untuk pool
-        if (_rewardType == RewardType.OZONE_ONLY) {
-            require(pool.allowOzoneRewards, "OZONE rewards not allowed for this pool");
-        }
-        
-        (uint256 baseRewards, bool shouldAutoBurn) = calculateAvailableRewards(msg.sender, _stakeIndex);
-        require(baseRewards > 0, "No rewards available");
-        
-        // Calculate reward distribution
-        (uint256 usdtAmount, uint256 ozoneAmount) = calculateRewardDistribution(baseRewards, _rewardType);
+        (uint256 usdtRewards, bool shouldAutoBurn) = calculateAvailableRewards(msg.sender, _stakeIndex);
+        require(usdtRewards > 0, "No rewards available");
         
         // Validate reserves
-        require(usdtAmount <= stakingUSDTReserves, "Insufficient USDT reserves");
-        require(ozoneAmount <= ozoneReserves, "Insufficient OZONE reserves");
+        require(usdtRewards <= stakingUSDTReserves, "Insufficient USDT reserves");
         
         // Update stake data
         userStake.lastClaimTime = block.timestamp;
-        userStake.totalClaimedReward += baseRewards;
-        userStake.totalUsdtClaimed += usdtAmount;
-        userStake.totalOzoneClaimed += ozoneAmount;
-        userStake.preferredRewardType = _rewardType;
+        userStake.totalClaimedReward += usdtRewards;
         userStake.nextClaimTime = block.timestamp + pool.claimInterval;
         
-        // Transfer rewards
-        if (usdtAmount > 0) {
-            stakingUSDTReserves -= usdtAmount;
-            totalStakingDistributed += usdtAmount;
-            require(usdtToken.transfer(msg.sender, usdtAmount), "USDT transfer failed");
-        }
-        
-        if (ozoneAmount > 0) {
-            ozoneReserves -= ozoneAmount;
-            totalOzoneDistributed += ozoneAmount;
-            require(ozoneToken.transfer(msg.sender, ozoneAmount), "OZONE transfer failed");
-        }
+        // Transfer USDT rewards
+        stakingUSDTReserves -= usdtRewards;
+        totalStakingDistributed += usdtRewards;
+        require(usdtToken.transfer(msg.sender, usdtRewards), "USDT transfer failed");
         
         // Update pool stats
-        pools[userStake.poolId].totalClaimed += baseRewards;
+        pools[userStake.poolId].totalClaimed += usdtRewards;
         
-        emit RewardClaimed(msg.sender, _stakeIndex, baseRewards, usdtAmount, ozoneAmount, _rewardType);
+        emit RewardClaimed(msg.sender, _stakeIndex, usdtRewards, userStake.totalClaimedReward);
         
-        // Auto-burn if enabled and reached max reward
+        // Auto-burn if duration has passed
         if (shouldAutoBurn && pool.enableAutoBurn) {
             _autoBurnTokens(_stakeIndex);
         }
@@ -689,7 +636,7 @@ contract OzoneStakingV2 is
     }
     
     // =============================================================================
-    // ADMIN FUNCTIONS
+    // ADMIN FUNCTIONS - RESERVES
     // =============================================================================
     
     /**
@@ -702,15 +649,6 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @dev Fund OZONE reserves untuk dual rewards
-     */
-    function fundOzoneReserves(uint256 _amount) external onlyOwner {
-        require(ozoneToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
-        ozoneReserves += _amount;
-        emit OzoneReservesFunded(_amount);
-    }
-    
-    /**
      * @dev Withdraw USDT reserves (emergency only)
      */
     function withdrawUSDTReserves(uint256 _amount) external onlyOwner {
@@ -720,15 +658,50 @@ contract OzoneStakingV2 is
         emit USDTReservesWithdrawn(_amount);
     }
     
+    // =============================================================================
+    // ADMIN FUNCTIONS - PRESALE
+    // =============================================================================
+    
     /**
-     * @dev Withdraw OZONE reserves (emergency only)
+     * @dev Add OZONE to presale supply
      */
-    function withdrawOzoneReserves(uint256 _amount) external onlyOwner {
-        require(_amount <= ozoneReserves, "Insufficient reserves");
-        ozoneReserves -= _amount;
-        require(ozoneToken.transfer(owner(), _amount), "Transfer failed");
-        emit OzoneReservesWithdrawn(_amount);
+    function addPresaleSupply(uint256 _amount) external onlyOwner {
+        require(ozoneToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
+        presaleSupply += _amount;
+        emit PresaleSupplyAdded(_amount, presaleSupply);
     }
+    
+    /**
+     * @dev Set treasury wallet
+     */
+    function setTreasuryWallet(address _newTreasury) external onlyOwner {
+        require(_newTreasury != address(0), "Invalid address");
+        address oldTreasury = treasuryWallet;
+        treasuryWallet = _newTreasury;
+        emit TreasuryWalletUpdated(oldTreasury, _newTreasury);
+    }
+    
+    /**
+     * @dev Update tax wallet address (for 1% USDT platform fees)
+     */
+    function setTaxWallet(address _newTaxWallet) external onlyOwner {
+        require(_newTaxWallet != address(0), "Invalid address");
+        address oldTaxWallet = taxWallet;
+        taxWallet = _newTaxWallet;
+        emit TaxWalletUpdated(oldTaxWallet, _newTaxWallet);
+    }
+    
+    /**
+     * @dev Toggle presale active status
+     */
+    function setPresaleActive(bool _active) external onlyOwner {
+        presaleActive = _active;
+        emit PresaleStatusChanged(_active);
+    }
+    
+    // =============================================================================
+    // ADMIN FUNCTIONS - GENERAL
+    // =============================================================================
     
     /**
      * @dev Set OZONE price (manual update, will be replaced with oracle later)
@@ -738,14 +711,6 @@ contract OzoneStakingV2 is
         uint256 oldPrice = ozonePrice;
         ozonePrice = _price;
         emit OzonePriceUpdated(oldPrice, _price, block.timestamp);
-    }
-    
-    /**
-     * @dev Set authorized stake creator (for Presale contract)
-     */
-    function setAuthorizedStakeCreator(address _creator, bool _status) external onlyOwner {
-        authorizedStakeCreators[_creator] = _status;
-        emit AuthorizedStakeCreatorUpdated(_creator, _status);
     }
     
     /**
@@ -810,24 +775,29 @@ contract OzoneStakingV2 is
     /**
      * @dev Get reward breakdown for user stake
      */
-    function getRewardBreakdown(address _user, uint256 _stakeIndex, RewardType _rewardType)
+    function getRewardBreakdown(address _user, uint256 _stakeIndex)
         external view returns (
             uint256 claimableRewardsUSDT,
-            uint256 usdtAmount,
-            uint256 ozoneAmount,
             uint256 alreadyClaimedUSDT,
-            bool shouldAutoBurn
+            bool shouldAutoBurn,
+            uint256 daysUntilBurn
         ) 
     {
         require(_stakeIndex < userStakes[_user].length, "Invalid stake index");
         
         (claimableRewardsUSDT, shouldAutoBurn) = calculateAvailableRewards(_user, _stakeIndex);
-        (usdtAmount, ozoneAmount) = calculateRewardDistribution(claimableRewardsUSDT, _rewardType);
         
         UserStake memory userStake = userStakes[_user][_stakeIndex];
         alreadyClaimedUSDT = userStake.totalClaimedReward;
         
-        return (claimableRewardsUSDT, usdtAmount, ozoneAmount, alreadyClaimedUSDT, shouldAutoBurn);
+        // Calculate days until burn
+        if (block.timestamp >= userStake.endTime) {
+            daysUntilBurn = 0;
+        } else {
+            daysUntilBurn = (userStake.endTime - block.timestamp) / 1 days;
+        }
+        
+        return (claimableRewardsUSDT, alreadyClaimedUSDT, shouldAutoBurn, daysUntilBurn);
     }
     
     /**
@@ -836,18 +806,37 @@ contract OzoneStakingV2 is
     function getStakingStats() external view returns (
         uint256 totalActiveStakes,
         uint256 totalUSDTDistributed,
-        uint256 totalOZONEDistributed,
         uint256 totalBurned,
         uint256 usdtReserveBalance,
-        uint256 ozoneReserveBalance
+        uint256 totalPresaleSoldAmount,
+        uint256 remainingPresaleSupply
     ) {
         return (
             activeStakeCount,
             totalStakingDistributed,
-            totalOzoneDistributed,
             totalTokensBurned,
             stakingUSDTReserves,
-            ozoneReserves
+            totalPresaleSold,
+            presaleSupply
+        );
+    }
+    
+    /**
+     * @dev Get presale information
+     */
+    function getPresaleInfo() external view returns (
+        uint256 currentPrice,
+        uint256 remainingSupply,
+        uint256 totalSold,
+        address treasury,
+        bool active
+    ) {
+        return (
+            ozonePrice,
+            presaleSupply,
+            totalPresaleSold,
+            treasuryWallet,
+            presaleActive
         );
     }
     
