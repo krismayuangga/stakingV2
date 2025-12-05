@@ -206,58 +206,58 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @dev Initialize default 5-tier pool system (same as original)
+     * @dev Initialize default 5-tier pool system based on USDT value
      */
     function _initializePools() private {
-        // LimoX Pool A: 100-10,000 OZONE (6% monthly APY) = 50 months duration
+        // LimoX Pool A: $100-$10,000 USDT (6% monthly APY) = 50 months duration
         _createPool(
             "LimoX Pool A",
             600,                        // 6% APY
-            100 * 10**18,              // Min 100 OZONE
-            10000 * 10**18,            // Max 10,000 OZONE
+            100 * 10**18,              // Min $100 USDT
+            10000 * 10**18,            // Max $10,000 USDT
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
             true                        // enableAutoBurn
         );
         
-        // LimoX Pool B: 10,001-25,000 OZONE (7% monthly APY) = ~43 months duration
+        // LimoX Pool B: $10,001-$25,000 USDT (7% monthly APY) = ~43 months duration
         _createPool(
             "LimoX Pool B",
             700,                        // 7% APY
-            10001 * 10**18,            // Min 10,001 OZONE
-            25000 * 10**18,            // Max 25,000 OZONE
+            10001 * 10**18,            // Min $10,001 USDT
+            25000 * 10**18,            // Max $25,000 USDT
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
             true
         );
         
-        // LimoX Pool C: 25,001-50,000 OZONE (8% monthly APY) = 37.5 months duration
+        // LimoX Pool C: $25,001-$50,000 USDT (8% monthly APY) = 37.5 months duration
         _createPool(
             "LimoX Pool C",
             800,                        // 8% APY
-            25001 * 10**18,            // Min 25,001 OZONE
-            50000 * 10**18,            // Max 50,000 OZONE
+            25001 * 10**18,            // Min $25,001 USDT
+            50000 * 10**18,            // Max $50,000 USDT
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
             true
         );
         
-        // SaproX Pool A: 50,001-100,000 OZONE (9% monthly APY) = ~33 months duration
+        // SaproX Pool A: $50,001-$100,000 USDT (9% monthly APY) = ~33 months duration
         _createPool(
             "SaproX Pool A",
             900,                        // 9% APY
-            50001 * 10**18,            // Min 50,001 OZONE
-            100000 * 10**18,           // Max 100,000 OZONE
+            50001 * 10**18,            // Min $50,001 USDT
+            100000 * 10**18,           // Max $100,000 USDT
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
             true
         );
         
-        // SaproX Pool B: 100,001+ OZONE (10% monthly APY) = 30 months duration
+        // SaproX Pool B: $100,001+ USDT (10% monthly APY) = 30 months duration
         _createPool(
             "SaproX Pool B",
             1000,                       // 10% APY
-            100001 * 10**18,           // Min 100,001 OZONE
+            100001 * 10**18,           // Min $100,001 USDT
             0,                          // No max (unlimited)
             CLAIM_INTERVAL,
             MAX_REWARD_PERCENTAGE,
@@ -371,10 +371,10 @@ contract OzoneStakingV2 is
         // Check presale supply
         require(ozoneAmount <= presaleSupply, "Insufficient presale supply");
         
-        // Validate pool min/max (dalam OZONE tokens)
-        require(ozoneAmount >= pool.minStakeUSDT, "Below minimum stake for this pool");
+        // Validate pool min/max (berdasarkan USDT value, bukan OZONE amount)
+        require(_usdtAmount >= pool.minStakeUSDT, "Below minimum stake for this pool");
         if (pool.maxStakeUSDT > 0) {
-            require(ozoneAmount <= pool.maxStakeUSDT, "Above maximum stake for this pool");
+            require(_usdtAmount <= pool.maxStakeUSDT, "Above maximum stake for this pool");
         }
         
         // Transfer USDT: base price to treasury, tax to tax wallet
