@@ -1,0 +1,31 @@
+{
+  "name": "ozone-stakingv2",
+  "version": "1.0.0",
+  "description": "**Platform Presale & Staking Terintegrasi untuk Buyer Baru**",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "compile": "hardhat compile",
+    "clean": "hardhat clean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krismayuangga/stakingV2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/krismayuangga/stakingV2/issues"
+  },
+  "homepage": "https://github.com/krismayuangga/stakingV2#readme",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-network-helpers": "^1.1.2",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@openzeppelin/contracts-upgradeable": "^5.4.0",
+    "@openzeppelin/hardhat-upgrades": "^3.9.1",
+    "hardhat": "^2.27.1"
+  }
+}
