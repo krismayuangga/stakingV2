@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("@openzeppelin/hardhat-upgrades");
+require("dotenv").config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -17,14 +18,22 @@ module.exports = {
       chainId: 31337
     },
     bscTestnet: {
-      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      url: process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545",
       chainId: 97,
-      accounts: [] // Add your private keys here for deployment
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: 10000000000 // 10 gwei
     },
     bscMainnet: {
-      url: "https://bsc-dataseed1.binance.org",
+      url: process.env.BSC_MAINNET_RPC || "https://bsc-dataseed1.binance.org",
       chainId: 56,
-      accounts: [] // Add your private keys here for deployment
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: 5000000000 // 5 gwei
+    }
+  },
+  etherscan: {
+    apiKey: {
+      bscTestnet: process.env.BSCSCAN_API_KEY || "",
+      bsc: process.env.BSCSCAN_API_KEY || ""
     }
   },
   gasReporter: {
