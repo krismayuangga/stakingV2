@@ -130,7 +130,6 @@ contract OzoneStakingV2 is
     
     // Staking Events
     event UserStaked(address indexed user, uint256 indexed poolId, uint256 ozoneAmount, uint256 usdtValue, uint256 stakeIndex, bool fromPresale);
-    event UserUnstaked(address indexed user, uint256 indexed stakeIndex, uint256 amount);
     
     // Reward Events
     event RewardClaimed(address indexed user, uint256 indexed stakeIndex, uint256 usdtAmount, uint256 totalClaimed);
@@ -400,38 +399,10 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @notice MANUAL STAKING DISABLED - Use old staking contract for existing OZONE holders
-     * @dev This function has been REMOVED to prevent financial exploitation
-     * 
-     * CRITICAL FINANCIAL PROTECTION:
-     * ─────────────────────────────────────────────────────────────────
-     * WHY MANUAL STAKING IS DISABLED:
-     * 
-     * Old holders bought OZONE at much lower prices (e.g., $1 in early presale)
-     * Current market price is SIGNIFICANTLY HIGHER due to CEX listing
-     * 
-     * If manual staking was allowed, old holders could exploit the system:
-     * - Stake large amounts of OZONE bought at old low prices
-     * - Receive rewards based on CURRENT HIGH market price
-     * - This creates massive financial loss for the contract
-     * 
-     * Example Scenario (prices for illustration only):
-     * - Old holder bought 10,000 OZONE at $1 = $10,000 investment
-     * - Current price: Much higher than original purchase price
-     * - If allowed to stake with current price calculation:
-     *   Contract would pay rewards based on inflated USDT value
-     *   This could drain reserves and cause insolvency
-     * 
-     * SOLUTION:
-     * ✅ NEW buyers: Use buyAndStake() in THIS contract (pays current market price)
-     * ✅ EXISTING holders: Use OLD staking contract (original price basis)
-     * ─────────────────────────────────────────────────────────────────
-     * 
-     * Function stake() intentionally removed for financial security.
-     * Only buyAndStake() is available for new USDT purchases at current prices.
+     * @notice MANUAL STAKING DISABLED - Prevents price arbitrage exploitation
+     * @dev Old holders paid lower prices. Staking at current price would drain reserves.
+     * Solution: NEW buyers use buyAndStake(). EXISTING holders use old contract.
      */
-    
-    // Manual staking function REMOVED - See documentation above for explanation
     
     /**
      * @dev Internal function to create stake entry
@@ -594,27 +565,10 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @dev Manual unstake before reaching 300% (optional feature, can be disabled)
-     * @notice This function allows early exit but may have penalties
+     * @notice UNSTAKE DISABLED - Staking is final commitment
+     * @dev Prevents exploitation: users would claim 300% rewards then unstake for double profit
+     * Staking = locked until auto-burn. Claim rewards every 15 days up to 300% total.
      */
-    function unstake(uint256 _stakeIndex) external nonReentrant whenNotPaused {
-        require(_stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
-        
-        UserStake storage userStake = userStakes[msg.sender][_stakeIndex];
-        require(userStake.isActive && !userStake.isBurned, "Stake is not active");
-        
-        uint256 amountToReturn = userStake.amount;
-        
-        // Update state
-        userStake.isActive = false;
-        pools[userStake.poolId].totalStaked -= userStake.amount;
-        activeStakeCount--;
-        
-        // Transfer OZONE back to user
-        require(ozoneToken.transfer(msg.sender, amountToReturn), "Transfer failed");
-        
-        emit UserUnstaked(msg.sender, _stakeIndex, amountToReturn);
-    }
     
     // =============================================================================
     // ADMIN FUNCTIONS - RESERVES
