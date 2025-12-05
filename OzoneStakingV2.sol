@@ -32,11 +32,6 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-// Interface untuk OZONE Token PoR integration
-interface IOZONEToken {
-    function getProofOfReserves() external view returns (uint256 treasuryBalance, uint256 monthlyProfit, uint256 distributedRewards, uint256 availableForRewards);
-}
-
 /**
  * @title OzoneStakingV2 - Integrated Presale & Staking Platform
  * @dev UUPS Upgradeable system with presale + manual pool selection + time-based claims
@@ -77,18 +72,15 @@ contract OzoneStakingV2 is
      * @dev UserStake structure dengan dual reward tracking
      */
     struct UserStake {
-        uint256 amount;                // Amount received by contract (after tax if any)
-        uint256 originalAmount;        // Original amount staked - untuk reward calculation
-        uint256 usdtValueAtStake;      // USDT value saat stake (for tier locking)
+        uint256 amount;                // Amount OZONE staked (after any tax)
+        uint256 usdtValueAtStake;      // USDT value saat stake (for tier locking & rewards)
         uint256 poolId;                // Pool ID (tier locked)
         uint256 lockedAPY;             // APY locked at stake time
         uint256 startTime;             // Stake start time
         uint256 lastClaimTime;         // Last claim timestamp
         uint256 totalClaimedReward;    // Total rewards claimed (USDT equivalent)
-        uint256 nextClaimTime;         // Next available claim time
         bool isActive;                 // Stake active status
         bool isBurned;                 // Auto-burned status
-        uint256 endTime;               // Expected end time (duration-based)
         bool isFromPresale;            // Whether stake is from presale
     }
     
@@ -99,7 +91,6 @@ contract OzoneStakingV2 is
     // Token References
     IERC20 public ozoneToken;
     IERC20 public usdtToken;
-    IOZONEToken public ozoneContract;
     
     // Pool Management
     mapping(uint256 => Pool) public pools;
@@ -183,7 +174,6 @@ contract OzoneStakingV2 is
     function initialize(
         address _ozoneToken,
         address _usdtToken,
-        address _ozoneContract,
         uint256 _initialOzonePrice,
         address _treasuryWallet,
         address _taxWallet,
@@ -191,7 +181,6 @@ contract OzoneStakingV2 is
     ) public initializer {
         require(_ozoneToken != address(0), "Invalid OZONE token");
         require(_usdtToken != address(0), "Invalid USDT token");
-        require(_ozoneContract != address(0), "Invalid OZONE contract");
         require(_treasuryWallet != address(0), "Invalid treasury wallet");
         require(_taxWallet != address(0), "Invalid tax wallet");
         require(_initialOzonePrice > 0, "Invalid price");
@@ -203,7 +192,6 @@ contract OzoneStakingV2 is
         
         ozoneToken = IERC20(_ozoneToken);
         usdtToken = IERC20(_usdtToken);
-        ozoneContract = IOZONEToken(_ozoneContract);
         ozonePrice = _initialOzonePrice;
         treasuryWallet = _treasuryWallet;
         taxWallet = _taxWallet;
@@ -402,7 +390,7 @@ contract OzoneStakingV2 is
         
         // Create stake entry (OZONE stays in contract)
         // For presale, no OZONE transfer tax, so amount = originalAmount
-        _createStakeEntry(msg.sender, _poolId, ozoneAmount, ozoneAmount, usdtValue, pool.monthlyAPY, true);
+        _createStakeEntry(msg.sender, _poolId, ozoneAmount, usdtValue, pool.monthlyAPY, true);
         
         uint256 stakeIndex = userStakes[msg.sender].length - 1;
         
@@ -445,29 +433,20 @@ contract OzoneStakingV2 is
         address _user,
         uint256 _poolId,
         uint256 _amount,
-        uint256 _originalAmount,
         uint256 _usdtValue,
         uint256 _lockedAPY,
         bool _fromPresale
     ) private {
-        // Calculate expected end time based on duration
-        Pool memory pool = pools[_poolId];
-        uint256 durationSeconds = pool.durationMonths * MONTH_DURATION;
-        uint256 endTime = block.timestamp + durationSeconds;
-        
         userStakes[_user].push(UserStake({
             amount: _amount,
-            originalAmount: _originalAmount,
             usdtValueAtStake: _usdtValue,
             poolId: _poolId,
             lockedAPY: _lockedAPY,
             startTime: block.timestamp,
             lastClaimTime: block.timestamp,
             totalClaimedReward: 0,
-            nextClaimTime: block.timestamp + CLAIM_INTERVAL,
             isActive: true,
             isBurned: false,
-            endTime: endTime,
             isFromPresale: _fromPresale
         }));
         
@@ -513,8 +492,12 @@ contract OzoneStakingV2 is
         // Check if duration has passed (auto-burn condition)
         shouldAutoBurn = false;
         Pool memory pool = pools[userStake.poolId];
-        if (pool.enableAutoBurn && block.timestamp >= userStake.endTime) {
-            shouldAutoBurn = true;
+        if (pool.enableAutoBurn) {
+            // Calculate endTime dynamically: startTime + (durationMonths * 30 days)
+            uint256 endTime = userStake.startTime + (pool.durationMonths * MONTH_DURATION);
+            if (block.timestamp >= endTime) {
+                shouldAutoBurn = true;
+            }
         }
         
         return (totalRewardUSDT, shouldAutoBurn);
@@ -534,7 +517,8 @@ contract OzoneStakingV2 is
         if (!userStake.isActive || userStake.isBurned) return false;
         
         // Check if 15 days have passed since last claim
-        return block.timestamp >= userStake.nextClaimTime;
+        uint256 nextClaimTime = userStake.lastClaimTime + CLAIM_INTERVAL;
+        return block.timestamp >= nextClaimTime;
     }
     
     /**
@@ -556,7 +540,6 @@ contract OzoneStakingV2 is
         // Update stake data
         userStake.lastClaimTime = block.timestamp;
         userStake.totalClaimedReward += usdtRewards;
-        userStake.nextClaimTime = block.timestamp + pool.claimInterval;
         
         // Transfer USDT rewards
         stakingUSDTReserves -= usdtRewards;
@@ -781,11 +764,13 @@ contract OzoneStakingV2 is
         UserStake memory userStake = userStakes[_user][_stakeIndex];
         alreadyClaimedUSDT = userStake.totalClaimedReward;
         
-        // Calculate days until burn
-        if (block.timestamp >= userStake.endTime) {
+        // Calculate days until burn (dynamic calculation)
+        Pool memory pool = pools[userStake.poolId];
+        uint256 endTime = userStake.startTime + (pool.durationMonths * MONTH_DURATION);
+        if (block.timestamp >= endTime) {
             daysUntilBurn = 0;
         } else {
-            daysUntilBurn = (userStake.endTime - block.timestamp) / 1 days;
+            daysUntilBurn = (endTime - block.timestamp) / 1 days;
         }
         
         return (claimableRewardsUSDT, alreadyClaimedUSDT, shouldAutoBurn, daysUntilBurn);
@@ -832,18 +817,6 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @dev Get OZONE contract Proof of Reserves
-     */
-    function getOZONEProofOfReserves() external view returns (
-        uint256 treasuryBalance,
-        uint256 monthlyProfit,
-        uint256 distributedRewards,
-        uint256 availableForRewards
-    ) {
-        return ozoneContract.getProofOfReserves();
-    }
-    
-    /**
      * @dev Get contract version
      */
     function getVersion() external pure returns (string memory) {
@@ -864,11 +837,58 @@ contract OzoneStakingV2 is
         require(_stakeIndex < userStakes[_user].length, "Invalid stake index");
         UserStake memory userStake = userStakes[_user][_stakeIndex];
         
-        if (block.timestamp >= userStake.nextClaimTime) {
+        uint256 nextClaimTime = userStake.lastClaimTime + CLAIM_INTERVAL;
+        if (block.timestamp >= nextClaimTime) {
             return 0;
         }
         
-        return userStake.nextClaimTime - block.timestamp;
+        return nextClaimTime - block.timestamp;
+    }
+    
+    /**
+     * @dev Master function untuk frontend - Single call untuk semua data penting
+     * @notice Menggabungkan presale + staking stats dalam 1 function call (gas efficient)
+     */
+    function getContractOverview() external view returns (
+        // Presale Data
+        uint256 currentOzonePrice,
+        uint256 remainingPresaleSupply,
+        uint256 totalPresaleSoldAmount,
+        bool isPresaleActive,
+        
+        // Staking Data
+        uint256 totalActiveStakes,
+        uint256 totalUSDTDistributed,
+        uint256 totalOzoneBurned,
+        uint256 usdtReserveBalance,
+        
+        // Pool Data
+        uint256 totalActivePools,
+        
+        // Treasury Wallets
+        address treasuryAddress,
+        address taxWalletAddress
+    ) {
+        return (
+            // Presale Data
+            ozonePrice,
+            presaleSupply,
+            totalPresaleSold,
+            presaleActive,
+            
+            // Staking Data
+            activeStakeCount,
+            totalStakingDistributed,
+            totalTokensBurned,
+            stakingUSDTReserves,
+            
+            // Pool Data
+            totalPools,
+            
+            // Treasury Wallets
+            treasuryWallet,
+            taxWallet
+        );
     }
     
     // =============================================================================
