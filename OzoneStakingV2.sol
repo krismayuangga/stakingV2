@@ -9,7 +9,7 @@ pragma solidity ^0.8.20;
 ╚██████╔╝███████╗╚██████╔╝██║ ╚████║███████╗
  ╚═════╝ ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
 
-    🏭 OZONE STAKING V2 - Integrated Presale & Staking Platform
+    🏭 OZONE STAKING V2 - High Yield Investment Program (HYIP)
     
     ════════════════════════════════════════════════════════════════════
     │  🛒 Buy & Stake: One-Click Purchase + Auto-Stake               │
@@ -19,9 +19,17 @@ pragma solidity ^0.8.20;
     │  ⏰ Claim Every 15 Days (Time-Based)                            │
     │  🔥 Duration-Based Auto-Burn: (300% ÷ APY) Months             │
     │  🔄 UUPS Upgradeable for Future Enhancements                   │
+    │  ⚠️  NOT TRADITIONAL STAKING - Tokens BURNED after duration    │
     ════════════════════════════════════════════════════════════════════
     
-    💡 Buy OZONE with USDT → Auto-stake to selected pool → Earn USDT daily
+    💡 BUSINESS MODEL (Similar to Mining/Bond):
+       1. Buy OZONE with USDT → Auto-stake to selected pool
+       2. Earn USDT rewards every 15 days (up to 300% total)
+       3. After duration ends, OZONE tokens AUTO-BURNED (NOT returned)
+       4. User profit = 300% USDT rewards - initial USDT investment
+    
+    ⚠️  IMPORTANT: This is NOT traditional staking where you get tokens back!
+       OZONE tokens are CONSUMED (burned) in exchange for USDT rewards.
        Duration locked: 6% APY = 50 months, 10% APY = 30 months
 */
 
@@ -117,6 +125,7 @@ contract OzoneStakingV2 is
     uint256 public constant MONTH_DURATION = 30 days;      // 30 days = 1 month
     uint256 public constant PURCHASE_TAX_RATE = 100;       // 1% platform fee (100 basis points)
     uint256 public constant BASIS_POINTS = 10000;          // 100% = 10000 basis points
+    uint256 public constant EXPECTED_USDT_DECIMALS = 18;   // USDT decimals on BSC (WARNING: 6 on Ethereum!)
     
     // Price Management
     uint256 public ozonePrice; // OZONE price in USDT (18 decimals)
@@ -183,6 +192,7 @@ contract OzoneStakingV2 is
         require(_treasuryWallet != address(0), "Invalid treasury wallet");
         require(_taxWallet != address(0), "Invalid tax wallet");
         require(_initialOzonePrice > 0, "Invalid price");
+        require(_initialPresaleSupply > 0, "Invalid presale supply");
         
         __Ownable_init(msg.sender);
         __Pausable_init();
@@ -195,7 +205,7 @@ contract OzoneStakingV2 is
         treasuryWallet = _treasuryWallet;
         taxWallet = _taxWallet;
         presaleSupply = _initialPresaleSupply;
-        presaleActive = true;
+        presaleActive = false; // IMPORTANT: Set to false by default, activate after funding OZONE tokens
         
         nextPoolId = 1;
         totalPools = 0;
@@ -500,6 +510,51 @@ contract OzoneStakingV2 is
     }
     
     /**
+     * @dev Batch claim all available rewards for user (UX optimization)
+     * @notice Claims rewards from all eligible stakes in one transaction
+     */
+    function claimAllRewards() external nonReentrant whenNotPaused {
+        uint256 totalStakes = userStakes[msg.sender].length;
+        require(totalStakes > 0, "No stakes found");
+        
+        uint256 totalClaimedUSDT = 0;
+        uint256 successfulClaims = 0;
+        
+        for (uint256 i = 0; i < totalStakes; i++) {
+            if (!canClaim(msg.sender, i)) continue;
+            
+            UserStake storage userStake = userStakes[msg.sender][i];
+            Pool memory pool = pools[userStake.poolId];
+            
+            (uint256 usdtRewards, bool shouldAutoBurn) = calculateAvailableRewards(msg.sender, i);
+            if (usdtRewards == 0) continue;
+            if (usdtRewards > stakingUSDTReserves) continue; // Skip if insufficient reserves
+            
+            // Update stake data
+            userStake.lastClaimTime = block.timestamp;
+            userStake.totalClaimedReward += usdtRewards;
+            
+            // Update reserves and stats
+            stakingUSDTReserves -= usdtRewards;
+            totalStakingDistributed += usdtRewards;
+            pools[userStake.poolId].totalClaimed += usdtRewards;
+            
+            totalClaimedUSDT += usdtRewards;
+            successfulClaims++;
+            
+            emit RewardClaimed(msg.sender, i, usdtRewards, userStake.totalClaimedReward);
+            
+            // Auto-burn if duration has passed
+            if (shouldAutoBurn && pool.enableAutoBurn) {
+                _autoBurnTokensBatch(i);
+            }
+        }
+        
+        require(totalClaimedUSDT > 0, "No claimable rewards");
+        require(usdtToken.transfer(msg.sender, totalClaimedUSDT), "USDT transfer failed");
+    }
+    
+    /**
      * @dev Claim USDT rewards
      */
     function claimRewards(uint256 _stakeIndex) external nonReentrant whenNotPaused {
@@ -540,6 +595,31 @@ contract OzoneStakingV2 is
     // =============================================================================
     
     /**
+     * @dev Auto burn helper for batch claims (internal)
+     */
+    function _autoBurnTokensBatch(uint256 _stakeIndex) private {
+        UserStake storage userStake = userStakes[msg.sender][_stakeIndex];
+        if (!userStake.isActive || userStake.isBurned) return;
+        
+        uint256 burnAmount = userStake.amount;
+        
+        // Mark as burned and inactive
+        userStake.isBurned = true;
+        userStake.isActive = false;
+        
+        // Update stats
+        pools[userStake.poolId].totalStaked -= burnAmount;
+        totalTokensBurned += burnAmount;
+        activeStakeCount--;
+        
+        // Burn tokens from contract balance
+        require(ozoneToken.transfer(address(0x000000000000000000000000000000000000dEaD), burnAmount), 
+                "Burn failed");
+        
+        emit TokensAutoBurned(msg.sender, _stakeIndex, burnAmount, userStake.totalClaimedReward);
+    }
+    
+    /**
      * @dev Auto burn tokens when reaching 300% rewards
      */
     function _autoBurnTokens(uint256 _stakeIndex) private {
@@ -557,7 +637,8 @@ contract OzoneStakingV2 is
         totalTokensBurned += burnAmount;
         activeStakeCount--;
         
-        // Burn tokens (transfer to dead address)
+        // Burn tokens from contract balance (NOT from user wallet - tokens stored in contract)
+        // CRITICAL FIX: OZONE tokens never transferred to user, stored in contract during buyAndStake
         require(ozoneToken.transfer(address(0x000000000000000000000000000000000000dEaD), burnAmount), 
                 "Burn failed");
         
@@ -628,8 +709,15 @@ contract OzoneStakingV2 is
     
     /**
      * @dev Toggle presale active status
+     * @notice IMPORTANT: Before activating presale, ensure contract has OZONE tokens >= presaleSupply
+     * Check: ozoneToken.balanceOf(address(this)) >= presaleSupply
      */
     function setPresaleActive(bool _active) external onlyOwner {
+        if (_active) {
+            // Safety check: contract must have enough OZONE tokens for presale
+            uint256 contractBalance = ozoneToken.balanceOf(address(this));
+            require(contractBalance >= presaleSupply, "Insufficient OZONE balance - fund contract first");
+        }
         presaleActive = _active;
         emit PresaleStatusChanged(_active);
     }
