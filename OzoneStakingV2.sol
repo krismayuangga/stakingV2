@@ -405,23 +405,30 @@ contract OzoneStakingV2 is
      * 
      * CRITICAL FINANCIAL PROTECTION:
      * ─────────────────────────────────────────────────────────────────
-     * Old presale price: $1 per OZONE
-     * Current market price: ~$91 per OZONE (91x difference!)
+     * WHY MANUAL STAKING IS DISABLED:
      * 
-     * If manual staking allowed:
-     * - User stakes 10,000 OZONE (bought at $1 = $10,000 investment)
-     * - USDT value: 10,000 × $91 = $910,000
-     * - Monthly rewards (9%): $81,900 USDT
-     * - Annual rewards: $982,800 USDT
-     * - CONTRACT LOSES: $972,800 for a $10,000 investment!
+     * Old holders bought OZONE at much lower prices (e.g., $1 in early presale)
+     * Current market price is SIGNIFICANTLY HIGHER due to CEX listing
+     * 
+     * If manual staking was allowed, old holders could exploit the system:
+     * - Stake large amounts of OZONE bought at old low prices
+     * - Receive rewards based on CURRENT HIGH market price
+     * - This creates massive financial loss for the contract
+     * 
+     * Example Scenario (prices for illustration only):
+     * - Old holder bought 10,000 OZONE at $1 = $10,000 investment
+     * - Current price: Much higher than original purchase price
+     * - If allowed to stake with current price calculation:
+     *   Contract would pay rewards based on inflated USDT value
+     *   This could drain reserves and cause insolvency
      * 
      * SOLUTION:
-     * ✅ NEW buyers: Use buyAndStake() in THIS contract (real-time price ~$91)
-     * ✅ EXISTING holders: Use OLD staking contract (1:1 ratio, $1 per OZONE)
+     * ✅ NEW buyers: Use buyAndStake() in THIS contract (pays current market price)
+     * ✅ EXISTING holders: Use OLD staking contract (original price basis)
      * ─────────────────────────────────────────────────────────────────
      * 
      * Function stake() intentionally removed for financial security.
-     * Only buyAndStake() is available for new USDT purchases.
+     * Only buyAndStake() is available for new USDT purchases at current prices.
      */
     
     // Manual staking function REMOVED - See documentation above for explanation
