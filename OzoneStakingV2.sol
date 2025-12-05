@@ -412,40 +412,31 @@ contract OzoneStakingV2 is
     }
     
     /**
-     * @dev Stake OZONE tokens ke pool tertentu (manual selection by existing OZONE holders)
-     * @notice OZONE token has 1% transfer tax - contract receives 99%, but rewards calculated on 100%
+     * @notice MANUAL STAKING DISABLED - Use old staking contract for existing OZONE holders
+     * @dev This function has been REMOVED to prevent financial exploitation
+     * 
+     * CRITICAL FINANCIAL PROTECTION:
+     * ─────────────────────────────────────────────────────────────────
+     * Old presale price: $1 per OZONE
+     * Current market price: ~$91 per OZONE (91x difference!)
+     * 
+     * If manual staking allowed:
+     * - User stakes 10,000 OZONE (bought at $1 = $10,000 investment)
+     * - USDT value: 10,000 × $91 = $910,000
+     * - Monthly rewards (9%): $81,900 USDT
+     * - Annual rewards: $982,800 USDT
+     * - CONTRACT LOSES: $972,800 for a $10,000 investment!
+     * 
+     * SOLUTION:
+     * ✅ NEW buyers: Use buyAndStake() in THIS contract (real-time price ~$91)
+     * ✅ EXISTING holders: Use OLD staking contract (1:1 ratio, $1 per OZONE)
+     * ─────────────────────────────────────────────────────────────────
+     * 
+     * Function stake() intentionally removed for financial security.
+     * Only buyAndStake() is available for new USDT purchases.
      */
-    function stake(uint256 _poolId, uint256 _amount) external nonReentrant whenNotPaused {
-        require(_poolId > 0 && _poolId < nextPoolId, "Pool does not exist");
-        require(_amount > 0, "Amount must be greater than 0");
-        
-        Pool memory pool = pools[_poolId];
-        require(pool.isActive, "Pool is not active");
-        
-        // Validate pool min/max (dalam OZONE tokens - based on original amount)
-        require(_amount >= pool.minStakeUSDT, "Below minimum stake for this pool");
-        if (pool.maxStakeUSDT > 0) {
-            require(_amount <= pool.maxStakeUSDT, "Above maximum stake for this pool");
-        }
-        
-        // Calculate after-tax amount (OZONE has 1% transfer tax)
-        // Contract will receive 99%, but we track the original 100% for reward calculation
-        uint256 afterTaxAmount = (_amount * 99) / 100;
-        
-        // Transfer OZONE from user (user sends _amount, contract receives afterTaxAmount due to 1% tax)
-        require(ozoneToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
-        
-        // Calculate USDT value berdasarkan original amount (before tax) at current OZONE price
-        // This ensures rewards are calculated fairly on the full amount user intended to stake
-        uint256 usdtValue = (_amount * ozonePrice) / 10**18;
-        
-        // Create stake entry:
-        // - amount: afterTaxAmount (what contract actually received - 99%)
-        // - originalAmount: _amount (what user sent - 100%, used for reward calculation)
-        _createStakeEntry(msg.sender, _poolId, afterTaxAmount, _amount, usdtValue, pool.monthlyAPY, false);
-        
-        emit UserStaked(msg.sender, _poolId, _amount, usdtValue, userStakes[msg.sender].length - 1, false);
-    }
+    
+    // Manual staking function REMOVED - See documentation above for explanation
     
     /**
      * @dev Internal function to create stake entry
